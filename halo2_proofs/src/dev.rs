@@ -689,7 +689,7 @@ impl<F: FieldExt> MockProver<F> {
                                 &Value::Real(F::zero()),
                             ) {
                                 Value::Real(x) if x.is_zero_vartime() => None,
-                                Value::Real(_) => Some(VerifyFailure::ConstraintNotSatisfied {
+                                Value::Real(x) => { dbg!("LAZYYYYYY", x, poly.repr_string()); Some(VerifyFailure::ConstraintNotSatisfied {
                                     constraint: (
                                         (gate_index, gate.name()).into(),
                                         poly_index,
@@ -714,7 +714,7 @@ impl<F: FieldExt> MockProver<F> {
                                             &self.instance,
                                         ),
                                     ),
-                                }),
+                                })} ,
                                 Value::Poison => Some(VerifyFailure::ConstraintPoisoned {
                                     constraint: (
                                         (gate_index, gate.name()).into(),
