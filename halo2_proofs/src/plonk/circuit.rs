@@ -1,6 +1,7 @@
 use core::cmp::max;
 use core::ops::{Add, Mul};
-use ff::Field;
+use ff::{Field, BitViewSized};
+use halo2curves::FieldExt;
 use std::{
     convert::TryFrom,
     ops::{Neg, Sub},
@@ -925,139 +926,68 @@ impl<F: Field> Expression<F> {
         }
     }
 
-    /// Evaluate the polynomial lazily using the provided closures to perform the
-    /// operations.
-    pub fn evaluate_lazy_1(
-        &self,
-        constant: &impl Fn(F) -> F,
-        selector_column: &impl Fn(Selector) -> F,
-        fixed_column: &impl Fn(FixedQuery) -> F,
-        advice_column: &impl Fn(AdviceQuery) -> F,
-        instance_column: &impl Fn(InstanceQuery) -> F,
-        challenge: &impl Fn(Challenge) -> F,
-        negated: &impl Fn(F) -> F,
-        sum: &impl Fn(F, F) -> F,
-        product: &impl Fn(F, F) -> F,
-        scaled: &impl Fn(F, F) -> F,
-        zero: &F,
-    ) -> String {
-
-        let f = |prefix: &str, value: &F| -> String {
-            let format = format!("{}{:?}",prefix, value);
-            let mut stripped = &format[2..];
-            while stripped.len()> 1 && let Some(stripped_1) = stripped.strip_prefix('0') {
-                stripped = stripped_1;
-            }
-            if stripped.len() < 16 {
-                format!("{}",u128::from_str_radix(stripped, 16).unwrap())
-            } else {
-                format
-            }
-        };
-
+    /// get a fast identifier of this expression
+    pub fn fast_identifier(&self) -> Vec<u8> {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        self.serialize(&mut cursor).unwrap();
+        cursor.into_inner()
+    }
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()>{
         match self {
-            Expression::Constant(scalar) => f("C",scalar),
-            Expression::Selector(selector) => f("S",&selector_column(*selector)),
-            Expression::Fixed(query) => f("F",&fixed_column(*query)),
-            Expression::Advice(query) => f("A",&advice_column(*query)),
-            Expression::Instance(query) => f("I",&instance_column(*query)),
-            Expression::Challenge(value) => f("CH",&challenge(*value)),
+            Expression::Constant(scalar) => {
+                writer.write(format!("{:?}", scalar).as_bytes())?;
+            },
+            Expression::Selector(selector) => {
+                writer.write(b"S")?;
+                writer.write(&selector.0.to_le_bytes())?;
+            },
+            Expression::Fixed(query) => {
+                writer.write(b"F")?;
+                writer.write(&query.column_index.to_le_bytes())?;
+                writer.write(&query.rotation.0.to_le_bytes())?;
+            },
+            Expression::Advice(query) => {
+                writer.write(b"A")?;
+                writer.write(&query.column_index.to_le_bytes())?;
+                writer.write(&query.rotation.0.to_le_bytes())?;
+            },
+            Expression::Instance(query) => {
+                writer.write(b"I")?;
+                writer.write(&query.column_index.to_le_bytes())?;
+                writer.write(&query.rotation.0.to_le_bytes())?;
+            },
+            Expression::Challenge(challenge) => {
+                writer.write(b"W")?;
+                writer.write(&challenge.index.to_le_bytes())?;
+            },
             Expression::Negated(a) => {
-                let a = a.evaluate_lazy_1(
-                    constant,
-                    selector_column,
-                    fixed_column,
-                    advice_column,
-                    instance_column,
-                    challenge,
-                    negated,
-                    sum,
-                    product,
-                    scaled,
-                    zero,
-                );
-                format!("-{}",a)
-            }
+                writer.write(b"(-")?;
+                a.serialize(writer)?;
+                writer.write(b")")?;
+            },
             Expression::Sum(a, b) => {
-                let a = a.evaluate_lazy_1(
-                    constant,
-                    selector_column,
-                    fixed_column,
-                    advice_column,
-                    instance_column,
-                    challenge,
-                    negated,
-                    sum,
-                    product,
-                    scaled,
-                    zero,
-                );
-                let b = b.evaluate_lazy_1(
-                    constant,
-                    selector_column,
-                    fixed_column,
-                    advice_column,
-                    instance_column,
-                    challenge,
-                    negated,
-                    sum,
-                    product,
-                    scaled,
-                    zero,
-                );
-                format!("{}+{}",a,b)
-            }
+                writer.write(b"(")?;
+                a.serialize(writer)?;
+                writer.write(b"+")?;
+                b.serialize(writer)?;
+                writer.write(b")")?;
+            },
             Expression::Product(a, b) => {
-                let (a, b) = if a.complexity() <= b.complexity() {
-                    (a, b)
-                } else {
-                    (b, a)
-                };
-                let a = a.evaluate_lazy_1(
-                    constant,
-                    selector_column,
-                    fixed_column,
-                    advice_column,
-                    instance_column,
-                    challenge,
-                    negated,
-                    sum,
-                    product,
-                    scaled,
-                    zero,
-                );
-                let b = b.evaluate_lazy_1(
-                    constant,
-                    selector_column,
-                    fixed_column,
-                    advice_column,
-                    instance_column,
-                    challenge,
-                    negated,
-                    sum,
-                    product,
-                    scaled,
-                    zero,
-                );
-                format!("{}*{}",a,b)
-            }
-            Expression::Scaled(a, ff) => {
-                let a = a.evaluate_lazy_1(
-                    constant,
-                    selector_column,
-                    fixed_column,
-                    advice_column,
-                    instance_column,
-                    challenge,
-                    negated,
-                    sum,
-                    product,
-                    scaled,
-                    zero,
-                );
-                format!("{}*{}", f("K",ff), a)
+                writer.write(b"(")?;
+                a.serialize(writer)?;
+                writer.write(b"*")?;
+                b.serialize(writer)?;
+                writer.write(b")")?;
+            },
+            Expression::Scaled(a, f) => {
+                writer.write(b"(")?;
+                a.serialize(writer)?;
+                writer.write(b"*")?;
+                writer.write(format!("{:?}",f).as_bytes())?;
+                writer.write(b")")?;
             }
         }
+        Ok(())
     }
 
     /// Identifier for this expression. Expressions with identical identifiers
@@ -1232,17 +1162,17 @@ impl<F: std::fmt::Debug> std::fmt::Debug for Expression<F> {
     }
 }
 
-impl<F: std::fmt::Debug>  Expression<F> {
-    /// 
+impl<F: std::fmt::Debug> Expression<F> {
+    ///
     pub fn repr_string(&self) -> String {
         let f = |value: &F| -> String {
-            let format = format!("{:?}",value);
+            let format = format!("{:?}", value);
             let mut stripped = &format[2..];
             while stripped.len()> 1 && let Some(stripped_1) = stripped.strip_prefix('0') {
                 stripped = stripped_1;
             }
             if stripped.len() < 16 {
-                format!("{}",u128::from_str_radix(stripped, 16).unwrap())
+                format!("{}", u128::from_str_radix(stripped, 16).unwrap())
             } else {
                 format
             }
@@ -1255,44 +1185,30 @@ impl<F: std::fmt::Debug>  Expression<F> {
                 index,
                 column_index,
                 rotation,
-            }) => format!("F[{}[{}]+{}]",
-                index,
-                column_index,
-                rotation.0,
-                ),
+            }) => format!("F[{}[{}]+{}]", index, column_index, rotation.0,),
             Expression::Advice(AdviceQuery {
                 index,
                 column_index,
                 rotation,
                 phase,
-            }) => format!("A[{}[{}]+{};{}]",
-                index,
-                column_index,
-                rotation.0,
-                phase.0
-                ),
+            }) => format!("A[{}[{}]+{};{}]", index, column_index, rotation.0, phase.0),
             Expression::Instance(InstanceQuery {
                 index,
                 column_index,
                 rotation,
-                        }) => format!("I[{}[{}]+{}]",
-                index,
-                column_index,
-                rotation.0,
-                ),
+            }) => format!("I[{}[{}]+{}]", index, column_index, rotation.0,),
             Expression::Challenge(challenge) => {
                 format!("CH[{};{:?}]", challenge.index, challenge.phase)
             }
             Expression::Negated(poly) => format!("-{}", poly.repr_string()),
             Expression::Sum(a, b) => format!("{}+{}", a.repr_string(), b.repr_string()),
-            Expression::Product(a, b) => format!("{}*{}", a.repr_string(),b.repr_string()),
+            Expression::Product(a, b) => format!("{}*{}", a.repr_string(), b.repr_string()),
             Expression::Scaled(poly, scalar) => {
                 format!("{}*{}", f(scalar), poly.repr_string())
             }
         }
     }
 }
-
 
 impl<F: Field> Neg for Expression<F> {
     type Output = Expression<F>;

@@ -114,7 +114,6 @@ impl<V> Value<V> {
             inner: self.inner.zip(other.inner),
         }
     }
-
 }
 
 impl<V, W> Value<(V, W)> {
@@ -616,7 +615,7 @@ impl<F: FieldExt> Mul<F> for Value<&Assigned<F>> {
 
 impl<F: PartialEq> PartialEq<Value<F>> for Value<F> {
     fn eq(&self, other: &Value<F>) -> bool {
-        if let Some((a,b)) = self.inner.as_ref().zip(other.inner.as_ref()) {
+        if let Some((a, b)) = self.inner.as_ref().zip(other.inner.as_ref()) {
             a.eq(b)
         } else {
             self.inner.is_none() == other.inner.is_none()
@@ -631,8 +630,8 @@ impl<F: PartialOrd> PartialOrd<Value<F>> for Value<F> {
             (None, None) => Some(std::cmp::Ordering::Equal),
             (None, Some(_)) => Some(std::cmp::Ordering::Less),
             (Some(_), None) => Some(std::cmp::Ordering::Greater),
-            (Some(a), Some(b)) => a.partial_cmp(b)
-        } 
+            (Some(a), Some(b)) => a.partial_cmp(b),
+        }
     }
 }
 
@@ -642,16 +641,16 @@ impl<F: PartialOrd> Ord for Value<F> {
     }
 }
 
-impl<V,E> Value<Result<V,E>> {
+impl<V, E> Value<Result<V, E>> {
     /// Transposes an `Value` of a [`Result`] into a [`Result`] of an `Value`.
-    pub fn transpose(self) -> Result<Value<V>,E> {
+    pub fn transpose(self) -> Result<Value<V>, E> {
         match self.inner {
             Some(Ok(x)) => Ok(Value::known(x)),
             Some(Err(e)) => Err(e),
             None => Ok(Value::unknown()),
         }
     }
-} 
+}
 
 impl<V> Value<V> {
     /// Returns the field element corresponding to this value.
