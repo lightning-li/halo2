@@ -53,7 +53,7 @@ pub fn create_proof<
     instances: &[&[&[Scheme::Scalar]]],
     mut rng: R,
     transcript: &mut T,
-) -> Result<(), Error> {
+) -> Result<(Vec<Vec<Polynomial<Scheme::Scalar, Coeff>>>, Vec<Vec<Blind<Scheme::Scalar>>>), Error> {
     for instance in instances.iter() {
         if instance.len() != pk.vk.cs.num_instance_columns {
             return Err(Error::InvalidInstances);
@@ -628,7 +628,21 @@ pub fn create_proof<
         .chain(vanishing.open(x));
 
     let prover = P::new(params);
-    prover
+    let ret = prover
         .create_proof(rng, transcript, instances)
-        .map_err(|_| Error::ConstraintSystemFailure)
+        .map_err(|_| Error::ConstraintSystemFailure);
+    if ret.is_err() {
+        return Err(Error::ConstraintSystemFailure);
+    }
+
+    let ret_advice_polys: Vec<Vec<Polynomial<Scheme::Scalar, Coeff>>> = advice
+        .iter()
+        .map(|single| single.advice_polys.clone())
+        .collect();
+    let ret_advice_blinds: Vec<Vec<Blind<Scheme::Scalar>>> = advice
+        .iter()
+        .map(|single| single.advice_blinds.clone())
+        .collect();
+    
+    Ok((ret_advice_polys, ret_advice_blinds))
 }
