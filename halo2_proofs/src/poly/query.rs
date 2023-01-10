@@ -21,11 +21,11 @@ pub trait Query<F>: Sized + Clone {
 #[derive(Debug, Clone)]
 pub struct ProverQuery<'com, C: CurveAffine> {
     /// point at which polynomial is queried
-    pub(crate) point: C::Scalar,
+    pub point: C::Scalar,
     /// coefficients of polynomial
-    pub(crate) poly: &'com Polynomial<C::Scalar, Coeff>,
+    pub poly: &'com Polynomial<C::Scalar, Coeff>,
     /// blinding factor of polynomial
-    pub(crate) blind: Blind<C::Scalar>,
+    pub blind: Blind<C::Scalar>,
 }
 
 #[doc(hidden)]
@@ -83,11 +83,11 @@ impl<'com, C: CurveAffine, M: MSM<C>> VerifierQuery<'com, C, M> {
 #[derive(Debug)]
 pub struct VerifierQuery<'com, C: CurveAffine, M: MSM<C>> {
     /// point at which polynomial is queried
-    pub(crate) point: C::Scalar,
+    pub point: C::Scalar,
     /// commitment to polynomial
-    pub(crate) commitment: CommitmentReference<'com, C, M>,
+    pub commitment: CommitmentReference<'com, C, M>,
     /// evaluation of polynomial at query point
-    pub(crate) eval: C::Scalar,
+    pub eval: C::Scalar,
 }
 
 impl<'com, C: CurveAffine, M: MSM<C>> Clone for VerifierQuery<'com, C, M> {
